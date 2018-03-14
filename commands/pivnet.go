@@ -20,6 +20,7 @@ import (
 	"github.com/pivotal-cf/pivnet-cli/rc/filesystem"
 	"github.com/pivotal-cf/pivnet-cli/version"
 	"github.com/robdimsdale/sanitizer"
+	"github.com/pivotal-cf/pivnet-cli/uaa"
 )
 
 //go:generate counterfeiter . Authenticator
@@ -149,22 +150,46 @@ func init() {
 func NewPivnetClient() *gp.Client {
 	var apiToken string
 	var host string
+	var skipSSLValidation bool
 
 	if Pivnet.profile != nil {
 		apiToken = Pivnet.profile.APIToken
 		host = Pivnet.profile.Host
+		skipSSLValidation = Pivnet.profile.SkipSSLValidation
 	}
 
-	return NewPivnetClientWithToken(apiToken, host)
+	return NewPivnetClientWithToken(apiToken, host, skipSSLValidation)
 }
+const (
+	legacyAPITokenLength = 20
+)
+func NewPivnetClientWithToken(apiToken string, host string, skipSSLValidation bool) *gp.Client {
+	var usingUAAToken = false
 
-func NewPivnetClientWithToken(apiToken string, host string) *gp.Client {
+	if len(apiToken) > legacyAPITokenLength {
+		usingUAAToken = true
+		Pivnet.Logger.Info(fmt.Sprintf("host: %s", host))
+		tokenFetcher := uaa.NewTokenFetcher(host, apiToken)
+		var err error
+		apiToken, err = tokenFetcher.GetToken()
+
+		if err != nil {
+			log.Fatalf("Exiting with error: %s", err)
+		}
+	}
+
+	fmt.Printf("using profile")
+	fmt.Printf("use agent: %s", Pivnet.userAgent)
+	clientConfig := pivnet.ClientConfig{
+		Host:              host,
+		Token:             apiToken,
+		UserAgent:         Pivnet.userAgent,
+		SkipSSLValidation: skipSSLValidation,
+		UsingUAAToken:     usingUAAToken,
+	}
+
 	return gp.NewClient(
-		pivnet.ClientConfig{
-			Token:     apiToken,
-			Host:      host,
-			UserAgent: Pivnet.userAgent,
-		},
+		clientConfig,
 		Pivnet.Logger,
 	)
 }

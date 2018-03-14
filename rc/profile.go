@@ -6,6 +6,7 @@ type PivnetProfile struct {
 	Name     string `yaml:"name"`
 	APIToken string `yaml:"api_token"`
 	Host     string `yaml:"host"`
+	SkipSSLValidation bool `yaml:"skip_ssl_verification"`
 }
 
 func (p *PivnetProfile) Validate() error {

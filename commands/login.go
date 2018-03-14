@@ -5,6 +5,7 @@ import "github.com/pivotal-cf/pivnet-cli/commands/login"
 type LoginCommand struct {
 	APIToken string `long:"api-token" description:"Pivnet API Token" required:"true"`
 	Host     string `long:"host" description:"Pivnet API Host" default:"https://network.pivotal.io"`
+	SkipSSLValidation bool `long:"skip-ssl-validation" description:"Skips SSL Validation"`
 }
 
 //go:generate counterfeiter . LoginClient
@@ -31,7 +32,7 @@ func (command *LoginCommand) Execute([]string) error {
 
 	sanitizeWriters(command.APIToken)
 
-	client := NewPivnetClientWithToken(command.APIToken, command.Host)
+	client := NewPivnetClientWithToken(command.APIToken, command.Host, command.SkipSSLValidation)
 
 	return NewLoginClient(client).Login(
 		Pivnet.ProfileName,
