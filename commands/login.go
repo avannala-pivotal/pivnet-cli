@@ -10,7 +10,7 @@ type LoginCommand struct {
 
 //go:generate counterfeiter . LoginClient
 type LoginClient interface {
-	Login(name string, apiToken string, host string) error
+	Login(name string, apiToken string, host string, skipSSLValidation bool) error
 }
 
 var NewLoginClient = func(client login.PivnetClient) LoginClient {
@@ -38,5 +38,6 @@ func (command *LoginCommand) Execute([]string) error {
 		Pivnet.ProfileName,
 		command.APIToken,
 		command.Host,
+		command.SkipSSLValidation,
 	)
 }

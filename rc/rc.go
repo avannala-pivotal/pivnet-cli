@@ -26,6 +26,7 @@ func (h *RCHandler) SaveProfile(
 	profileName string,
 	apiToken string,
 	host string,
+	skipSSLValidation bool,
 ) error {
 	pivnetRC, err := h.loadPivnetRC()
 	if err != nil {
@@ -51,6 +52,7 @@ func (h *RCHandler) SaveProfile(
 			Name:     profileName,
 			APIToken: apiToken,
 			Host:     host,
+			SkipSSLValidation: skipSSLValidation,
 		}
 		index = len(pivnetRC.Profiles)
 		pivnetRC.Profiles = append(pivnetRC.Profiles, PivnetProfile{})

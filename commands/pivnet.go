@@ -35,7 +35,7 @@ type Filterer interface {
 
 //go:generate counterfeiter . RCHandler
 type RCHandler interface {
-	SaveProfile(profileName string, apiToken string, host string) error
+	SaveProfile(profileName string, apiToken string, host string, skipSSLValidation bool) error
 	ProfileForName(profileName string) (*rc.PivnetProfile, error)
 	RemoveProfileWithName(profileName string) error
 }
