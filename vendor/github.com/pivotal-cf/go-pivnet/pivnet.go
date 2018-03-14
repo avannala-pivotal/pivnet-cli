@@ -27,22 +27,24 @@ type Client struct {
 	token     string
 	userAgent string
 	logger    logger.Logger
+	usingUAAToken bool
 
 	HTTP *http.Client
 
 	downloader download.Client
 
-	Auth                 *AuthService
-	EULA                 *EULAsService
-	ProductFiles         *ProductFilesService
-	FileGroups           *FileGroupsService
-	Releases             *ReleasesService
-	Products             *ProductsService
-	UserGroups           *UserGroupsService
-	ReleaseDependencies  *ReleaseDependenciesService
-	DependencySpecifiers *DependencySpecifiersService
-	ReleaseTypes         *ReleaseTypesService
-	ReleaseUpgradePaths  *ReleaseUpgradePathsService
+	Auth                  *AuthService
+	EULA                  *EULAsService
+	ProductFiles          *ProductFilesService
+	FileGroups            *FileGroupsService
+	Releases              *ReleasesService
+	Products              *ProductsService
+	UserGroups            *UserGroupsService
+	ReleaseTypes          *ReleaseTypesService
+	ReleaseDependencies   *ReleaseDependenciesService
+	DependencySpecifiers  *DependencySpecifiersService
+	ReleaseUpgradePaths   *ReleaseUpgradePathsService
+	UpgradePathSpecifiers *UpgradePathSpecifiersService
 }
 
 type ClientConfig struct {
@@ -50,6 +52,7 @@ type ClientConfig struct {
 	Token             string
 	UserAgent         string
 	SkipSSLValidation bool
+	UsingUAAToken 	  bool
 }
 
 func NewClient(
@@ -68,9 +71,19 @@ func NewClient(
 		},
 	}
 
+	downloadClient := &http.Client{
+		Timeout: 0,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: config.SkipSSLValidation,
+			},
+			Proxy: http.ProxyFromEnvironment,
+		},
+	}
+
 	ranger := download.NewRanger(concurrentDownloads)
 	downloader := download.Client{
-		HTTPClient: http.DefaultClient,
+		HTTPClient: downloadClient,
 		Ranger:     ranger,
 		Logger:     logger,
 	}
@@ -79,6 +92,7 @@ func NewClient(
 		baseURL:    baseURL,
 		token:      config.Token,
 		userAgent:  config.UserAgent,
+		usingUAAToken: config.UsingUAAToken,
 		logger:     logger,
 		downloader: downloader,
 		HTTP:       httpClient,
@@ -91,10 +105,11 @@ func NewClient(
 	client.Releases = &ReleasesService{client: client, l: logger}
 	client.Products = &ProductsService{client: client, l: logger}
 	client.UserGroups = &UserGroupsService{client: client}
+	client.ReleaseTypes = &ReleaseTypesService{client: client}
 	client.ReleaseDependencies = &ReleaseDependenciesService{client: client}
 	client.DependencySpecifiers = &DependencySpecifiersService{client: client}
-	client.ReleaseTypes = &ReleaseTypesService{client: client}
 	client.ReleaseUpgradePaths = &ReleaseUpgradePathsService{client: client}
+	client.UpgradePathSpecifiers = &UpgradePathSpecifiersService{client: client}
 
 	return client
 }
@@ -118,8 +133,12 @@ func (c Client) CreateRequest(
 		return nil, err
 	}
 
+	if c.usingUAAToken {
+		req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.token))
+	} else {
+		req.Header.Add("Authorization", fmt.Sprintf("Token %s", c.token))
+	}
 	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add("Authorization", fmt.Sprintf("Token %s", c.token))
 	req.Header.Add("User-Agent", c.userAgent)
 
 	return req, nil
@@ -174,6 +193,10 @@ func (c Client) handleUnexpectedResponse(resp *http.Response) error {
 		return err
 	}
 
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return newErrTooManyRequests()
+	}
+
 	// We have to handle 500 differently because it has a different structure
 	if resp.StatusCode == http.StatusInternalServerError {
 		var internalServerError pivnetInternalServerErr
@@ -198,7 +221,7 @@ func (c Client) handleUnexpectedResponse(resp *http.Response) error {
 	case http.StatusNotFound:
 		return newErrNotFound(pErr.Message)
 	case http.StatusUnavailableForLegalReasons:
-		return newErrUnavailableForLegalReasons()
+		return newErrUnavailableForLegalReasons(pErr.Message)
 	default:
 		return ErrPivnetOther{
 			ResponseCode: resp.StatusCode,
